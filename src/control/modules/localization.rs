@@ -1,31 +1,35 @@
-use std::{f32::consts::FRAC_PI_2, mem::take};
+use std::{f32::consts::FRAC_PI_2, mem::take};  // 0.5pi, take is taking ownership
 
-use anyhow::{Context, Result};
-use approx::assert_relative_eq;
-use module_derive::{module, require_some};
+use anyhow::{Context, Result};  // wraps error within more context
+use approx::assert_relative_eq;  // crate for approximating equality
+use module_derive::{module, require_some};  // ??
 use nalgebra::{
     distance, matrix, point, vector, Isometry2, Matrix, Matrix2, Matrix3, Point2, Rotation2,
     Vector2, Vector3,
-};
-use ordered_float::NotNan;
+};  // crate for linalg
+use ordered_float::NotNan;  // wrapper around Float, guaranteed to not be NaN
 use spl_network::{GamePhase, PlayerNumber, Team};
 use types::{
     field_marks_from_field_dimensions, CorrespondencePoints, Direction, FieldDimensions, FieldMark,
     GameControllerState, InitialPose, Line, Line2, LineData, LocalizationUpdate, Players,
     PrimaryState, Side,
-};
+};  // custom types
 
+// estimated position filters 
 use crate::control::filtering::{PoseFilter, ScoredPoseFilter};
 
+// ??
 pub struct Localization {
-    field_marks: Vec<FieldMark>,
-    last_primary_state: PrimaryState,
-    hypotheses: Vec<ScoredPoseFilter>,
-    hypotheses_when_entered_playing: Vec<ScoredPoseFilter>,
+    // vector of arbitrary fieldmarks (e.g. line, circle)
+    field_marks: Vec<FieldMark>,  
+    last_primary_state: PrimaryState,  // state given by gamecontroller (e.g. ready, set, penalized)
+    hypotheses: Vec<ScoredPoseFilter>,  // all possible poses
+    hypotheses_when_entered_playing: Vec<ScoredPoseFilter>,  // ??
     is_penalized_with_motion_in_set: bool,
     was_picked_up_while_penalized_with_motion_in_set: bool,
 }
 
+// parameters
 #[module(control)]
 #[input(path = primary_state, data_type = PrimaryState)]
 #[input(path = game_controller_state, data_type = GameControllerState)]
@@ -60,17 +64,20 @@ pub struct Localization {
 #[additional_output(path = localization.updates, data_type = Vec<Vec<LocalizationUpdate>>)]
 #[additional_output(path = localization.fit_errors, data_type = Vec<Vec<Vec<Vec<f32>>>>)]
 #[main_output(name = robot_to_field, data_type = Isometry2<f32>)]
-impl Localization {}
+impl Localization {} // ??
 
 impl Localization {
+    // create a new localization instance
     fn new(context: NewContext) -> anyhow::Result<Self> {
         Ok(Self {
+            // get the field and line marks and chain them
             field_marks: field_marks_from_field_dimensions(context.field_dimensions)
                 .into_iter()
                 .chain(goal_support_structure_line_marks_from_field_dimensions(
                     context.field_dimensions,
                 ))
                 .collect(),
+
             last_primary_state: PrimaryState::Unstiff,
             hypotheses: vec![],
             hypotheses_when_entered_playing: vec![],
@@ -79,6 +86,12 @@ impl Localization {
         })
     }
 
+    // !! ??
+    // ? 1 wat is cycle context
+    // ? 2 wat is primary state - state gegeven door game controller
+    // ? 3 hoe werkt game controller state - game state, phase, kicking team etc
+    // ? 4 verschil hypotheses en when entered playing - 
+    // ? 5
     fn cycle(&mut self, mut context: CycleContext) -> Result<MainOutputs> {
         let primary_state = *require_some!(context.primary_state);
         let penalty = context
