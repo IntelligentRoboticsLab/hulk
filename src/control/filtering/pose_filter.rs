@@ -176,6 +176,7 @@ impl PoseFilter {
         self.mean
     }
 
+    // rigid body transformation (shape and relative distance does not change)
     pub fn isometry(&self) -> Isometry2<f32> {
         Isometry2::new(vector![self.mean.x, self.mean.y], self.mean.z)
     }
