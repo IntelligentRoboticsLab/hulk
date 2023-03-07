@@ -23,7 +23,7 @@ pub struct Localization {
     // vector of arbitrary fieldmarks (e.g. line, circle)
     field_marks: Vec<FieldMark>,  
     last_primary_state: PrimaryState,  // state given by gamecontroller (e.g. ready, set, penalized)
-    hypotheses: Vec<ScoredPoseFilter>,  // all possible poses
+    hypotheses: Vec<ScoredPoseFilter>,  // all possible poses [src/control/filtering/pose_filter]
     hypotheses_when_entered_playing: Vec<ScoredPoseFilter>,  // ??
     is_penalized_with_motion_in_set: bool,
     was_picked_up_while_penalized_with_motion_in_set: bool,
@@ -236,7 +236,8 @@ impl Localization {
         if self.is_penalized_with_motion_in_set && !has_ground_contact {
             self.was_picked_up_while_penalized_with_motion_in_set = true;
         }
-
+        
+        // if state is ready, set or playing
         if primary_state == PrimaryState::Ready
             || primary_state == PrimaryState::Set
             || primary_state == PrimaryState::Playing
@@ -245,6 +246,7 @@ impl Localization {
         {
             let mut fit_errors_per_measurement = vec![];
 
+            // from the context get the measured lines
             context
                 .measured_lines_in_field
                 .fill_on_subscription(Vec::new);
@@ -252,31 +254,50 @@ impl Localization {
             context
                 .updates
                 .fill_on_subscription(|| vec![vec![]; self.hypotheses.len()]);
-
+            
+            
+            // zip line data from top and bottom together
+            // [src/vision/cycler.rs:pub fn start] for camera
+            
+            // ? where do they get line datas from
             let line_datas = context
-                .line_data_top
-                .persistent
+                .line_data_top  // LineData from top camera (vision top), contains: (timestamp, line data)
+                .persistent // ? what is this persistent thing
                 .iter()
                 .zip(context.line_data_bottom.persistent.iter());
             
             // start for loop-1
+
+            // iterate through lines in top and bottom camera
             for (
                 (line_data_top_timestamp, line_data_top),
                 (line_data_bottom_timestamp, line_data_bottom),
             ) in line_datas
+
+            
+            
             {
+                // assert that top and bottom are synced -> otherwise panic 
                 assert_eq!(line_data_top_timestamp, line_data_bottom_timestamp);
+
+                // get odometry values from the specific timestamp (could be invalid)
+                // ? what are the odometry values actually?
                 let current_odometry_to_last_odometry = context
                     .current_odometry_to_last_odometry
                     .get(*line_data_top_timestamp);
-
+                
+                // initialize empty fit error vec
                 let mut fit_errors_per_hypothesis = vec![];
 
-                // start for loop-2
+                // for every hypothesis (=possible robot location)
+                // reminder: [src/control/filtering/pose_filter]
                 for (hypothesis_index, scored_filter) in self.hypotheses.iter_mut().enumerate() {
+
+                    // if the odometry values were valid make a prediction
                     if let Some(current_odometry_to_last_odometry) =
                         current_odometry_to_last_odometry
-                    {
+                    {   
+                        // predict
                         predict(
                             &mut scored_filter.pose_filter,
                             current_odometry_to_last_odometry,
@@ -286,6 +307,8 @@ impl Localization {
                         scored_filter.score *=
                             *context.hypothesis_prediction_score_reduction_factor;
                     }
+
+
                     if *context.use_line_measurements {
                         let robot_to_field = scored_filter.pose_filter.isometry();
                         let current_measured_lines_in_field: Vec<_> = line_data_top
@@ -487,9 +510,7 @@ impl Localization {
         }
 
 
-
-        // end of if-1
-
+        // if state is NOT ready, set or playing do nothing (?)
         Ok(MainOutputs {
             robot_to_field: None,
         })
@@ -586,6 +607,8 @@ impl FieldMarkCorrespondence {
     }
 }
 
+
+// predict a PoseFilter State based on current state and odometry
 fn predict(
     filter: &mut PoseFilter,
     current_odometry_to_last_odometry: &Isometry2<f32>,
@@ -594,13 +617,17 @@ fn predict(
     let current_orientation_angle = filter.mean().z;
     // rotate odometry noise from robot frame to field frame
     let rotated_noise = Rotation2::new(current_orientation_angle) * odometry_noise.xy();
+
+
     let process_noise = Matrix::from_diagonal(&vector![
         rotated_noise.x.abs(),
         rotated_noise.y.abs(),
         odometry_noise.z
     ]);
-
+    
+    // PoseFilter.predict [src/control/filtering/pose_filter.rs]
     filter.predict(
+        // this is a lambda function that the predict function expects as state_prediction_function
         |state| {
             // rotate odometry from robot frame to field frame
             let robot_odometry =
@@ -611,6 +638,8 @@ fn predict(
                 state.z + current_odometry_to_last_odometry.rotation.angle()
             ]
         },
+
+        // this is the process noise the predict function expects
         process_noise,
     )
 }
