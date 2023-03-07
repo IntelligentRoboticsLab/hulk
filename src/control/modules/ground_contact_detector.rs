@@ -3,12 +3,18 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use module_derive::{module, require_some};
 use types::{SensorData, SolePressure};
 
+use std::fs::File;
+use std::io::BufReader;
+use rodio::{Decoder, OutputStream, source::Source};
+
+
 use crate::control::filtering::greater_than_with_hysteresis;
 
 pub struct GroundContactDetector {
     last_has_pressure: bool,
     last_time_switched: SystemTime,
     has_ground_contact: bool,
+    sound_played: bool,
 }
 
 #[module(control)]
@@ -26,6 +32,7 @@ impl GroundContactDetector {
             last_has_pressure: false,
             last_time_switched: UNIX_EPOCH,
             has_ground_contact: false,
+            sound_played: false,
         })
     }
 
@@ -51,6 +58,23 @@ impl GroundContactDetector {
             self.has_ground_contact = has_pressure;
         }
         self.last_has_pressure = has_pressure;
+        
+        if self.has_ground_contact{
+            self.sound_played = false;
+        }
+
+        if !self.has_ground_contact && !self.sound_played{
+            // Get a output stream handle to the default physical sound device
+            let (_stream, stream_handle) = OutputStream::try_default().unwrap();
+            // Load a sound from a file, using a path relative to Cargo.toml
+            let file = BufReader::new(File::open("etc/sounds/weeeee.wav").unwrap());
+            // Decode that sound file into a source
+            let source = Decoder::new(file).unwrap();
+            // Play the sound directly on the device
+            stream_handle.play_raw(source.convert_samples()).ok(); 
+            std::thread::sleep(std::time::Duration::from_secs(2));
+                self.sound_played = true;  
+            }
 
         Ok(MainOutputs {
             has_ground_contact: Some(self.has_ground_contact),

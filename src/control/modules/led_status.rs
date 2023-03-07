@@ -4,10 +4,6 @@ use anyhow::Result;
 use module_derive::{module, require_some};
 use types::{Ball, Eye, Leds, PrimaryState, Rgb, SensorData};
 
-use std::fs::File;
-use std::io::BufReader;
-use rodio::{Decoder, OutputStream, source::Source};
-
 pub struct LedStatus {
     blink_state: bool,
     last_blink_toggle: SystemTime,
@@ -137,21 +133,6 @@ impl LedStatus {
             last_ball_data_top_too_old,
             last_ball_data_bottom_too_old,
         );
-        
-        if at_least_one_ball_data_bottom {
-           // Get a output stream handle to the default physical sound device
-           let (_stream, stream_handle) = OutputStream::try_default().unwrap();
-           // Load a sound from a file, using a path relative to Cargo.toml
-           let file = BufReader::new(File::open("etc/sounds/weeeee.wav").unwrap());
-           // Decode that sound file into a source
-           let source = Decoder::new(file).unwrap();
-           // Play the sound directly on the device
-           stream_handle.play_raw(source.convert_samples()).ok();
-       
-           // The sound plays in a separate audio thread,
-           // so we need to keep the main thread alive while it's playing.
-           std::thread::sleep(std::time::Duration::from_secs(2));  
-        }
 
         let leds = Leds {
             left_ear: 0.0.into(),
