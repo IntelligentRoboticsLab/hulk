@@ -338,13 +338,15 @@ impl Localization {
                                 line_data
                                     .lines_in_robot
                                     .iter()
+
+                                    // ? mappinggg????
                                     .map(|&measured_line_in_robot| {
                                         robot_to_field * measured_line_in_robot
                                     })
                             })
                             .collect();
 
-                        
+                        // TODO
                         context.measured_lines_in_field.mutate_on_subscription(
                             |measured_lines_in_field| {
                                 if let Some(measured_lines_in_field) = measured_lines_in_field {
@@ -353,10 +355,16 @@ impl Localization {
                                 }
                             },
                         );
+
+                        // if there are no measured lines, we can't do anything with them
+                        // so get to next hypothesis
                         if current_measured_lines_in_field.is_empty() {
                             continue;
                         }
-
+                        
+                        // create tuple for a field mark with avg fit error and all fit errors
+                        // ? fit on what?
+                        // ? what error
                         let (field_mark_correspondences, fit_error, fit_errors) =
                             get_fitted_field_mark_correspondence(
                                 &current_measured_lines_in_field,
@@ -364,6 +372,8 @@ impl Localization {
                                 &context,
                                 context.fit_errors.is_subscribed(),
                             );
+
+                        // TODO
                         context.correspondence_lines.mutate_on_subscription(
                             |correspondence_lines| {
                                 let next_correspondence_lines = field_mark_correspondences
@@ -389,37 +399,65 @@ impl Localization {
                                 }
                             },
                         );
+
+                        // ? what is is_subscribed?
                         if context.fit_errors.is_subscribed() {
                             fit_errors_per_hypothesis.push(fit_errors);
                         }
+
+                        // get the max between fit error and minimum fit error
+                        // ? what is clamped?
                         let clamped_fit_error = fit_error.max(*context.minimum_fit_error);
+
+                        // ? what is this used for
                         let number_of_measurements_weight =
                             1.0 / field_mark_correspondences.len() as f32;
-
+                        
+                        
+                        // for every hypothesis we look at every field mark correspondence
                         for field_mark_correspondence in field_mark_correspondences {
+
+                            // we create an update
+                            // ? is this a update based on the fieldmark?
+                            // ? why do they differ?
                             let update = match field_mark_correspondence.field_mark {
+                                // either the fieldmark is a line with a line update
                                 FieldMark::Line { .. } => get_translation_and_rotation_measurement(
                                     robot_to_field,
                                     field_mark_correspondence,
                                 ),
+
+                                // either the fieldmark is a circle with a circle update
                                 FieldMark::Circle { .. } => get_2d_translation_measurement(
                                     robot_to_field,
                                     field_mark_correspondence,
                                 ),
                             };
+
+                            // get the length of the measured line
+                            // ! seems weird if it is not a line
                             let line_length =
                                 field_mark_correspondence.measured_line_in_field.length();
+                            
+                            // when the length is 0, the weight is 1
+                            // ? what is this weight used for?
                             let line_length_weight = if line_length == 0.0 {
                                 1.0
                             } else {
                                 1.0 / line_length
                             };
+
+                            // get the center and distance from measured circle
+                            // ! seems weird if it is not a circle
+
                             let line_center_point =
                                 field_mark_correspondence.measured_line_in_field.center();
                             let line_distance_to_robot = distance(
                                 &line_center_point,
                                 &Point2::from(robot_to_field.translation.vector),
                             );
+
+                            // TODO unclear
                             context.updates.mutate_on_subscription(|updates| {
                                 if let Some(updates) = updates {
                                     updates[hypothesis_index].push({
@@ -459,17 +497,24 @@ impl Localization {
                                     });
                                 }
                             });
+
+                            // create the weight used for uncertainty
+                            // ? why is this based on these variables ?
                             let uncertainty_weight = clamped_fit_error
                                 * number_of_measurements_weight
                                 * line_length_weight
                                 * line_distance_to_robot;
+
+                            
                             match field_mark_correspondence.field_mark {
+                                // if the fieldmark is a line
                                 FieldMark::Line { line: _, direction } => scored_filter
                                     .pose_filter
                                     .update_with_1d_translation_and_rotation(
                                         update,
                                         Matrix::from_diagonal(context.line_measurement_noise)
                                             * uncertainty_weight,
+                                        // a line has a direction which we can define
                                         |state| match direction {
                                             Direction::PositiveX => {
                                                 vector![state.y, state.z]
@@ -480,6 +525,8 @@ impl Localization {
                                         },
                                     )
                                     .context("Failed to update pose filter")?,
+                                
+                                // if the fieldmark is a circle
                                 FieldMark::Circle { .. } => scored_filter
                                     .pose_filter
                                     .update_with_2d_translation(
@@ -490,16 +537,19 @@ impl Localization {
                                     )
                                     .context("Failed to update pose filter")?,
                             }
+
+                            // check if the summed fit error is smaller than a good threshold
                             if field_mark_correspondence.fit_error_sum()
                                 < *context.good_matching_threshold
                             {
+                                // update the score with a positive score since it is a good match
                                 scored_filter.score += *context.score_per_good_match;
                             }
                         }
                     }
 
 
-                    // update the score of the hypothesis
+                    // update the score of the hypothesis with the base increase
                     scored_filter.score += *context.hypothesis_score_base_increase;
                 }
 
@@ -512,14 +562,25 @@ impl Localization {
 
             // end of for-loop-1
 
+            // from all hypotheses we get the hypothesis with highest score
+            // ! NOTE: score therefore seems to be related to the amount of matches with fieldmarks
             let best_hypothesis = self
                 .get_best_hypothesis()
                 .expect("Expected at least one hypothesis");
+
+            // get the score of the best hypothesis
             let best_score = best_hypothesis.score;
+
+            // get the rigid body transformation
+            // ! ? is this to the robot or from the robot to?
             let robot_to_field = best_hypothesis.pose_filter.isometry();
+
+            // ? what is a retain factor and why use it?
+            // it seems like only hypothesis are kept which are at least in the neighbourhood of the best score
             self.hypotheses
                 .retain(|filter| filter.score >= *context.hypothesis_retain_factor * best_score);
 
+            // TODO unclear
             context
                 .pose_hypotheses
                 .fill_on_subscription(|| self.hypotheses.clone());
@@ -527,6 +588,8 @@ impl Localization {
                 .fit_errors
                 .fill_on_subscription(|| fit_errors_per_measurement);
 
+            // return the robot_to_field value
+            // ? what is this
             *context.robot_to_field = robot_to_field;
             return Ok(MainOutputs {
                 robot_to_field: Some(robot_to_field),
@@ -539,7 +602,8 @@ impl Localization {
             robot_to_field: None,
         })
     }
-
+    
+    // get the hypothesis with highest score
     fn get_best_hypothesis(&self) -> Option<&ScoredPoseFilter> {
         self.hypotheses
             .iter()
@@ -775,8 +839,11 @@ fn get_fitted_field_mark_correspondence(
             }
         })
         .collect();
-    let fit_error = get_fit_error(&correspondence_points, &weight_matrices, correction);
 
+    // TODO this seems like the average fit error
+    let fit_error = get_fit_error(&correspondence_points, &weight_matrices, correction);
+    
+    // TODO field mark, avg fit error, all fit errors?
     (field_mark_correspondences, fit_error, fit_errors)
 }
 
