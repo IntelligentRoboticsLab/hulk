@@ -7,14 +7,18 @@ use serde::{Deserialize, Serialize};
 use serialize_hierarchy::SerializeHierarchy;
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, SerializeHierarchy)]
+
+// this is used as an entry for localization data samples
 pub struct ScoredPoseFilter {
-    pub pose_filter: PoseFilter,
-    pub score: f32,
+    pub pose_filter: PoseFilter,  // the position state (mean and covariance)
+    pub score: f32,  // ? what is score here (probability?)
 }
 
 impl ScoredPoseFilter {
+    // isometry is measured information, mapped to a specific metric space
     pub fn from_isometry(pose: Isometry2<f32>, covariance: Matrix3<f32>, score: f32) -> Self {
         Self {
+            // a pose filter is a mean state (x,y,theta) and covariance matrix
             pose_filter: PoseFilter::new(
                 vector![
                     pose.translation.x,
@@ -23,6 +27,7 @@ impl ScoredPoseFilter {
                 ],
                 covariance,
             ),
+            // ? score ?
             score,
         }
     }
@@ -42,23 +47,38 @@ impl PoseFilter {
         }
     }
 
+    // predict a new state
     pub fn predict<StatePredictionFunction>(
         &mut self,
-        state_prediction_function: StatePredictionFunction,
-        process_noise: Matrix3<f32>,
+        state_prediction_function: StatePredictionFunction,  // lambda function for prediction
+        process_noise: Matrix3<f32>,  // process noise
     ) -> Result<()>
     where
-        StatePredictionFunction: Fn(Vector3<f32>) -> Vector3<f32>,
+        StatePredictionFunction: Fn(Vector3<f32>) -> Vector3<f32>,  // definition of the lambda function
     {
+
+        // the following is Unscented Kalman Filter theory
+
+        // we get some sigma points around the current location (returns error if not OK)
         let sigma_points = sample_sigma_points(self.mean, self.covariance)?;
+
+        // predict new state for every sigma point
         let predicted_sigma_points: Vec<_> = sigma_points
             .iter()
             .copied()
-            .map(state_prediction_function)
+            .map(state_prediction_function)  // apply the prediction function (e.g state.x + odometry.x)
             .collect();
+
+        // get a mean from all the sigma points
         let state_mean = mean_from_3d_sigma_points(&predicted_sigma_points);
+
+        // get a covariance from all the sigma points
         let state_covariance = covariance_from_3d_sigma_points(state_mean, &predicted_sigma_points);
+
+        // actually update the mean of the PoseFilter object
         self.mean = state_mean;
+
+        // actually update covariance, but make sure it's symmetric for kalman filter
         self.covariance = into_symmetric(state_covariance + process_noise);
 
         Ok(())

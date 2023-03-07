@@ -292,29 +292,48 @@ impl Localization {
                 // for every hypothesis (=possible robot location)
                 // reminder: [src/control/filtering/pose_filter]
                 for (hypothesis_index, scored_filter) in self.hypotheses.iter_mut().enumerate() {
-
-                    // if the odometry values were valid make a prediction
+                    
+                    // PROCESS PREDICTION PHASE
+                    // if the odometry values were valid make a prediction, otherwise not
                     if let Some(current_odometry_to_last_odometry) =
                         current_odometry_to_last_odometry
                     {   
-                        // predict
+                        // use the general predict function to get process noise data
+                        // which internally calls PoseFilter.predict to update the pose filter state
                         predict(
-                            &mut scored_filter.pose_filter,
+                            &mut scored_filter.pose_filter,  // ScoredPoseFilter.PoseFilter
                             current_odometry_to_last_odometry,
                             context.odometry_noise,
                         )
                         .context("Failed to predict pose filter")?;
+
+                        // ? what does this score mean?
+                        // ? is it like the likelihood of the hypothesis?
                         scored_filter.score *=
                             *context.hypothesis_prediction_score_reduction_factor;
                     }
 
 
+                    // OBSERVATION UPDATE PHASE
+                    // if line measurements can be use, we use them to
+                    // ? to what
                     if *context.use_line_measurements {
+
+                        // get the rigid body transformation
+                        // ? to this position ???
                         let robot_to_field = scored_filter.pose_filter.isometry();
+
+                        // get all measured lines in the field from top camera
                         let current_measured_lines_in_field: Vec<_> = line_data_top
                             .iter()
+
+                            // combine the top lines with measured bottom lines
                             .chain(line_data_bottom.iter())
+
+                            // functional programming ask Pete, basically removing Nones
                             .filter_map(|&data| data.as_ref())
+
+                            // ? what is the transformation that is applied here ? 
                             .flat_map(|line_data| {
                                 line_data
                                     .lines_in_robot
@@ -324,6 +343,8 @@ impl Localization {
                                     })
                             })
                             .collect();
+
+                        
                         context.measured_lines_in_field.mutate_on_subscription(
                             |measured_lines_in_field| {
                                 if let Some(measured_lines_in_field) = measured_lines_in_field {
@@ -476,6 +497,9 @@ impl Localization {
                             }
                         }
                     }
+
+
+                    // update the score of the hypothesis
                     scored_filter.score += *context.hypothesis_score_base_increase;
                 }
 
@@ -614,11 +638,13 @@ fn predict(
     current_odometry_to_last_odometry: &Isometry2<f32>,
     odometry_noise: &Vector3<f32>,
 ) -> Result<()> {
+
     let current_orientation_angle = filter.mean().z;
     // rotate odometry noise from robot frame to field frame
     let rotated_noise = Rotation2::new(current_orientation_angle) * odometry_noise.xy();
 
-
+    // create diagonal matrix with the diagonal equal to the vector with noise x,y,z
+    // diagonality is a principle used for independence, efficiency and interpretability
     let process_noise = Matrix::from_diagonal(&vector![
         rotated_noise.x.abs(),
         rotated_noise.y.abs(),
@@ -632,6 +658,8 @@ fn predict(
             // rotate odometry from robot frame to field frame
             let robot_odometry =
                 Rotation2::new(state.z) * current_odometry_to_last_odometry.translation.vector;
+
+            // create a vector with updated states based on odometry
             vector![
                 state.x + robot_odometry.x,
                 state.y + robot_odometry.y,
