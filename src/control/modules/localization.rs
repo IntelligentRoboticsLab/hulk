@@ -68,6 +68,7 @@ impl Localization {} // ??
 
 impl Localization {
     // create a new localization instance
+    // ? why even 
     fn new(context: NewContext) -> anyhow::Result<Self> {
         Ok(Self {
             // get the field and line marks and chain them
@@ -102,10 +103,21 @@ impl Localization {
             .game_controller_state
             .map(|game_controller_state| game_controller_state.game_phase);
         let has_ground_contact = *require_some!(context.has_ground_contact);
+        
 
+        // ? how does match work here
+        // ? what are different match cases - generally
+        // while answering this you can ask new question about specific matches
+        
+
+        // ? 
         match (self.last_primary_state, primary_state, game_phase) {
             (PrimaryState::Initial, PrimaryState::Ready, _) => {
+
+                // ? what is an initial pose
                 let initial_pose = generate_initial_pose(
+
+                    // ? which context is used here
                     &context.initial_poses[*context.player_number],
                     context.field_dimensions,
                 );
@@ -213,6 +225,12 @@ impl Localization {
             }
             _ => {}
         }
+
+
+
+        // end of match
+
+
         self.last_primary_state = primary_state;
 
         if self.is_penalized_with_motion_in_set && !has_ground_contact {
@@ -222,6 +240,8 @@ impl Localization {
         if primary_state == PrimaryState::Ready
             || primary_state == PrimaryState::Set
             || primary_state == PrimaryState::Playing
+
+        // start of if-1
         {
             let mut fit_errors_per_measurement = vec![];
 
@@ -238,6 +258,8 @@ impl Localization {
                 .persistent
                 .iter()
                 .zip(context.line_data_bottom.persistent.iter());
+            
+            // start for loop-1
             for (
                 (line_data_top_timestamp, line_data_top),
                 (line_data_bottom_timestamp, line_data_bottom),
@@ -249,6 +271,8 @@ impl Localization {
                     .get(*line_data_top_timestamp);
 
                 let mut fit_errors_per_hypothesis = vec![];
+
+                // start for loop-2
                 for (hypothesis_index, scored_filter) in self.hypotheses.iter_mut().enumerate() {
                     if let Some(current_odometry_to_last_odometry) =
                         current_odometry_to_last_odometry
@@ -432,10 +456,14 @@ impl Localization {
                     scored_filter.score += *context.hypothesis_score_base_increase;
                 }
 
+                // end of for-loop-2
+
                 if context.fit_errors.is_subscribed() {
                     fit_errors_per_measurement.push(fit_errors_per_hypothesis);
                 }
             }
+
+            // end of for-loop-1
 
             let best_hypothesis = self
                 .get_best_hypothesis()
@@ -457,6 +485,10 @@ impl Localization {
                 robot_to_field: Some(robot_to_field),
             });
         }
+
+
+
+        // end of if-1
 
         Ok(MainOutputs {
             robot_to_field: None,
