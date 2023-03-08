@@ -30,6 +30,7 @@ pub struct Localization {
 }
 // test-for-github
 // parameters
+//
 #[module(control)]
 #[input(path = primary_state, data_type = PrimaryState)]
 #[input(path = game_controller_state, data_type = GameControllerState)]
@@ -618,12 +619,18 @@ fn goal_support_structure_line_marks_from_field_dimensions(
 
 #[derive(Clone, Copy, Debug)]
 struct FieldMarkCorrespondence {
+    // Line struct with dimension set to 2 representing measured line
     measured_line_in_field: Line2,
+    // Field mark that corresponds to measured line
     field_mark: FieldMark,
+    // first tuple is correspondence points from line, second is from field mark
+    // both have two (x, y) Point2 objects, measurement and reference respectively
+    // why does line have reference and why does field mark have measurement?
     correspondence_points: (CorrespondencePoints, CorrespondencePoints),
 }
 
 impl FieldMarkCorrespondence {
+    // sums errors for both line and field mark after normalizing
     fn fit_error_sum(&self) -> f32 {
         (self.correspondence_points.0.measured - self.correspondence_points.0.reference).norm()
             + (self.correspondence_points.1.measured - self.correspondence_points.1.reference)
@@ -678,8 +685,12 @@ fn get_fitted_field_mark_correspondence(
     context: &CycleContext,
     fit_errors_is_subscribed: bool,
 ) -> (Vec<FieldMarkCorrespondence>, f32, Vec<Vec<f32>>) {
+    // create empty vector using vec macro for storing fit errors
     let mut fit_errors = vec![];
+    // create isometry (translation, rotation, reflection etc) matrix, default is identity 
     let mut correction = Isometry2::identity();
+    // context provides max number of iterations
+    // probably based on 
     for _ in 0..*context.maximum_amount_of_outer_iterations {
         let correspondence_points = get_correspondence_points(get_field_mark_correspondence(
             measured_lines_in_field,
@@ -1025,6 +1036,7 @@ mod tests {
     use super::*;
 
     #[test]
+    // test whether signed angle is calculated correctly, not sure why this is in localization
     fn signed_angle() {
         let vector0 = vector![1.0_f32, 0.0_f32];
         let vector1 = vector![0.0_f32, 1.0_f32];
@@ -1035,6 +1047,7 @@ mod tests {
     }
 
     #[test]
+    // 
     fn fitting_line_results_in_zero_measurement() {
         let robot_to_field = Isometry2::identity();
         let field_mark_correspondence = FieldMarkCorrespondence {

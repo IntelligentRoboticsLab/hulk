@@ -142,7 +142,11 @@ pub struct Correspondences {
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 pub struct CorrespondencePoints {
+    // measured point, x and y coordinate
+    // how is the measurement obtained?
     pub measured: Point2<f32>,
+    // reference points, x and y
+    // what is this reference based on?
     pub reference: Point2<f32>,
 }
 
