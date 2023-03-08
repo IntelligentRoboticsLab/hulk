@@ -93,8 +93,8 @@ impl Localization {
     // ? 2 wat is primary state - state gegeven door game controller
     // ? 3 hoe werkt game controller state - game state, phase, kicking team etc
     // ? 4 verschil hypotheses en when entered playing - 
-    // ? 5
     fn cycle(&mut self, mut context: CycleContext) -> Result<MainOutputs> {
+        // get several values from primary state and game controller state
         let primary_state = *require_some!(context.primary_state);
         let penalty = context
             .game_controller_state
@@ -111,11 +111,13 @@ impl Localization {
         // while answering this you can ask new question about specific matches
         
 
-        // ? 
+        // match last primary state, primary state and game phase
         match (self.last_primary_state, primary_state, game_phase) {
+            // if last primary is initial, primary is ready (looks like a staring case)
             (PrimaryState::Initial, PrimaryState::Ready, _) => {
 
                 // ? what is an initial pose
+                // initialize initial pose and get values from context
                 let initial_pose = generate_initial_pose(
 
                     // ? which context is used here
