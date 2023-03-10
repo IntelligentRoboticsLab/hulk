@@ -575,7 +575,8 @@ impl Localization {
             let best_score = best_hypothesis.score;
 
             // get the rigid body transformation
-            // ! ? is this to the robot or from the robot to?
+            // ! ? is this the rotation to go from XI to XR?
+
             let robot_to_field = best_hypothesis.pose_filter.isometry();
 
             // ? what is a retain factor and why use it?
