@@ -81,6 +81,8 @@ impl Localization {
                 .collect(),
 
             last_primary_state: PrimaryState::Unstiff,
+
+            // ? what are the differences between these hypotheses
             hypotheses: vec![],
             hypotheses_when_entered_playing: vec![],
             is_penalized_with_motion_in_set: false,
@@ -94,6 +96,21 @@ impl Localization {
     // ? 3 hoe werkt game controller state - game state, phase, kicking team etc
     // ? 4 verschil hypotheses en when entered playing - 
     fn cycle(&mut self, mut context: CycleContext) -> Result<MainOutputs> {
+        /*
+        This is the Localization cycle, which handles all parts of the localization algorithms
+        run every tick.
+
+        Steps:
+            1. Get information from game controller
+            2. ---- Match statement ----
+            3. Gather measured lines from cameras, for each:
+                a. Gather odometry data
+                b. For every hypothesis
+                    I. Prediction phase using odometry
+                    II. Observation phase using fieldmark-correspondences from measured lines
+            4. Update best hypothesis and the hypotheses that are kept
+            5. 
+         */
         // get several values from primary state and game controller state
         let primary_state = *require_some!(context.primary_state);
         let penalty = context
@@ -103,6 +120,8 @@ impl Localization {
         let game_phase = context
             .game_controller_state
             .map(|game_controller_state| game_controller_state.game_phase);
+
+        // 
         let has_ground_contact = *require_some!(context.has_ground_contact);
         
 
@@ -575,7 +594,7 @@ impl Localization {
             let best_score = best_hypothesis.score;
 
             // get the rigid body transformation
-            // ! ? is this the rotation to go from XI to XR?
+            // ! ? is this the rotation to go from internal robot frame to field
 
             let robot_to_field = best_hypothesis.pose_filter.isometry();
 
@@ -593,7 +612,7 @@ impl Localization {
                 .fill_on_subscription(|| fit_errors_per_measurement);
 
             // return the robot_to_field value
-            // ? what is this
+            // ? what is this and why assign it again
             *context.robot_to_field = robot_to_field;
             return Ok(MainOutputs {
                 robot_to_field: Some(robot_to_field),
@@ -607,7 +626,7 @@ impl Localization {
         })
     }
     
-    // get the hypothesis with highest score
+    // get the hypothesis with highest score from all scored hypotheses
     fn get_best_hypothesis(&self) -> Option<&ScoredPoseFilter> {
         self.hypotheses
             .iter()
