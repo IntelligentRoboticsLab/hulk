@@ -96,6 +96,7 @@ impl Localization {
     fn cycle(&mut self, mut context: CycleContext) -> Result<MainOutputs> {
         // get several values from primary state and game controller state
         let primary_state = *require_some!(context.primary_state);
+
         let penalty = context
             .game_controller_state
             .map(|game_controller_state| game_controller_state.penalties[*context.player_number])
@@ -233,7 +234,8 @@ impl Localization {
 
         // end of match
 
-
+        
+        // 
         self.last_primary_state = primary_state;
 
         if self.is_penalized_with_motion_in_set && !has_ground_contact {
