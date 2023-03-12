@@ -691,10 +691,12 @@ impl Localization {
                                 FieldMark::Line { line: _, direction } => scored_filter
                                     .pose_filter
                                     .update_with_1d_translation_and_rotation(
-                                        update,
-                                        Matrix::from_diagonal(context.line_measurement_noise)
+                                        update,  // measurement
+                                        Matrix::from_diagonal(context.line_measurement_noise)  // measurement_noise
                                             * uncertainty_weight,
                                         // a line has a direction which we can define
+
+                                        // this is a measurement_prediction_function
                                         |state| match direction {
                                             Direction::PositiveX => {
                                                 vector![state.y, state.z]
