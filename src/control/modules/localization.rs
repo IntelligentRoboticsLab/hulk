@@ -2,7 +2,7 @@ use std::{f32::consts::FRAC_PI_2, mem::take};  // 0.5pi, take is taking ownershi
 
 use anyhow::{Context, Result};  // wraps error within more context
 use approx::assert_relative_eq;  // crate for approximating equality
-use module_derive::{module, require_some};  // ??
+use module_derive::{module, require_some};  // those are macro functions to check if not None
 use nalgebra::{
     distance, matrix, point, vector, Isometry2, Matrix, Matrix2, Matrix3, Point2, Rotation2,
     Vector2, Vector3,
@@ -24,9 +24,9 @@ pub struct Localization {
     field_marks: Vec<FieldMark>,  
     last_primary_state: PrimaryState,  // state given by gamecontroller (e.g. ready, set, penalized)
     hypotheses: Vec<ScoredPoseFilter>,  // all possible poses [src/control/filtering/pose_filter]
-    hypotheses_when_entered_playing: Vec<ScoredPoseFilter>,  // ??
-    is_penalized_with_motion_in_set: bool,
-    was_picked_up_while_penalized_with_motion_in_set: bool,
+    hypotheses_when_entered_playing: Vec<ScoredPoseFilter>,  // ?? is this the initial hypotheses?
+    is_penalized_with_motion_in_set: bool, // ?? boolean why matter
+    was_picked_up_while_penalized_with_motion_in_set: bool, // ?? boolean why matter
 }
 // test-for-github
 // parameters
@@ -85,6 +85,8 @@ impl Localization {
             // ? what are the differences between these hypotheses
             hypotheses: vec![],
             hypotheses_when_entered_playing: vec![],
+
+            // for a new localization instance default boolean false
             is_penalized_with_motion_in_set: false,
             was_picked_up_while_penalized_with_motion_in_set: false,
         })
@@ -130,6 +132,9 @@ impl Localization {
         // ? what are different match cases - generally
         // while answering this you can ask new question about specific matches
         
+
+        // !! THIS LOOKS LIKE SOMETHING WITH FSM
+        // ? ? something like changing the current primary state
 
         // match last primary state, primary state and game phase
         match (self.last_primary_state, primary_state, game_phase) {
@@ -192,6 +197,9 @@ impl Localization {
             (PrimaryState::Playing, PrimaryState::Penalized, _) => {
                 match penalty {
                     Some(spl_network::Penalty::IllegalMotionInSet { remaining: _ }) => {
+
+
+                        //?? this is a boolean in the loc struct, why true?
                         self.is_penalized_with_motion_in_set = true;
                     }
                     Some(_) => {}
@@ -199,7 +207,11 @@ impl Localization {
                 };
             }
             (PrimaryState::Penalized, _, _) if primary_state != PrimaryState::Penalized => {
+
+                // ?? why does this boolean matter here and what does it do
                 if self.is_penalized_with_motion_in_set {
+
+                    // ?? why does this other boolean matter here and what does it do?
                     if self.was_picked_up_while_penalized_with_motion_in_set {
                         self.hypotheses = take(&mut self.hypotheses_when_entered_playing);
 
@@ -215,6 +227,8 @@ impl Localization {
                             })
                             .collect();
                     }
+
+                    // ! there are those booleans again, back to default false
                     self.is_penalized_with_motion_in_set = false;
                     self.was_picked_up_while_penalized_with_motion_in_set = false;
                 } else {
@@ -254,21 +268,54 @@ impl Localization {
         // end of match
 
         
-        // 
+        // current primary state will be last
         self.last_primary_state = primary_state;
 
+        // ! booleans back at it again
+        // if robot is penalized and not on ground it has been picked up
         if self.is_penalized_with_motion_in_set && !has_ground_contact {
             self.was_picked_up_while_penalized_with_motion_in_set = true;
         }
         
-        // if state is ready, set or playing
+        // if state is ready, set or playing, we can start updating our localization
         if primary_state == PrimaryState::Ready
             || primary_state == PrimaryState::Set
             || primary_state == PrimaryState::Playing
+        {   
+            
+            /*
+            DataType below is: Vec<Vec<Vec<Vec<f32>>>>
+            Basically for each measurement we have information for all hypotheses.
+            
+            1. add all hypotheses info for each measurement
+                - var: fit_errors_per_measurement
+                - how: fit_errors_per_measurement.push(fit_errors)
+                - type: Vec<Vec<Vec<Vec<f32>>>>
 
-        // start of if-1
-        {
-            let mut fit_errors_per_measurement = vec![];
+                2. add all outer iterations for each hypothesis
+                    - var: fit_errors_per_hypothesis
+                    - how: fit_errors_per_hypothesis.push(fit_errors)
+                    - type: Vec<Vec<Vec<f32>>>
+                
+                    3. add GradDesc fit errors for each outer iteration
+                        - var: fit_errors
+                        - how: fit_errors.push(fit_errors_per_iteration)
+                        - type: Vec<Vec<f32>>
+                
+                        4. add fit errors for each GradDesc iteration
+                        - var: fit_errors_per_iteration
+                        - how: fit_errors_per_iteration.push(error)
+                        - type: Vec<f32>
+                
+                            5. get an error for a specific GradDesc iteration
+                                - var: error
+                                - how: get_fit_error
+                                - type: <f32>
+            
+            
+            
+             */
+            let mut fit_errors_per_measurement: Vec<Vec<Vec<Vec<f32>>>> = vec![];
 
             // from the context get the measured lines
             context
@@ -280,22 +327,26 @@ impl Localization {
                 .fill_on_subscription(|| vec![vec![]; self.hypotheses.len()]);
             
             
-            // zip line data from top and bottom together
             // [src/vision/cycler.rs:pub fn start] for camera
-            
-            // ? where do they get line datas from
-            let line_datas = context
-                .line_data_top  // LineData from top camera (vision top), contains: (timestamp, line data)
-                .persistent // ? what is this persistent thing
+            // [crates/types/src/line_data.rs]
+            // LineData struct contains
+            // - lines_in_robot: Vec<Line2>
+            // - used_vertical_filtered_segments: HashSet<Point2<u16>>
+
+            // zip line data from top and bottom together
+            let line_datas = context    // CycleContext
+                // perceptionDataType containing persistent and temporary timestamped LineData
+                // [src/framework/perception_database.rs, pub struct PerceptionDataType]
+                .line_data_top
+                // get persistent data from top camera (vision top), contains: (timestamp, LineData)
+                .persistent
                 .iter()
                 .zip(context.line_data_bottom.persistent.iter());
-            
-            // start for loop-1
 
-            // iterate through lines in top and bottom camera
+            // iterate through LineData in top and bottom camera
             for (
-                (line_data_top_timestamp, line_data_top),
-                (line_data_bottom_timestamp, line_data_bottom),
+                (line_data_top_timestamp, line_data_top),  // &SystemTime, Vec<&Option<LineData>>
+                (line_data_bottom_timestamp, line_data_bottom),  // &SystemTime, Vec<&Option<LineData>>
             ) in line_datas
 
             
@@ -310,8 +361,34 @@ impl Localization {
                     .current_odometry_to_last_odometry
                     .get(*line_data_top_timestamp);
                 
-                // initialize empty fit error vec
-                let mut fit_errors_per_hypothesis = vec![];
+                /*
+                DataType below is: Vec<Vec<Vec<f32>>>
+
+                1. add all outer iterations for each hypothesis
+                    - var: fit_errors_per_hypothesis
+                    - how: fit_errors_per_hypothesis.push(fit_errors)
+                    - type: Vec<Vec<Vec<f32>>>
+                
+                    2. add GradDesc fit errors for each outer iteration
+                        - var: fit_errors
+                        - how: fit_errors.push(fit_errors_per_iteration)
+                        - type: Vec<Vec<f32>>
+                
+                        3. add fit errors for each GradDesc iteration
+                        - var: fit_errors_per_iteration
+                        - how: fit_errors_per_iteration.push(error)
+                        - type: Vec<f32>
+                
+                            4. get an error for a specific GradDesc iteration
+                                - var: error
+                                - how: get_fit_error
+                                - type: <f32>
+
+               
+
+                BTW: This gets pushed into: fit_errors_per_measurement
+                 */
+                let mut fit_errors_per_hypothesis: Vec<Vec<Vec<f32>>> = vec![];
 
                 // for every hypothesis (=possible robot location)
                 // reminder: [src/control/filtering/pose_filter]
@@ -779,7 +856,11 @@ fn get_fitted_field_mark_correspondence(
     let mut correction = Isometry2::identity();
     // context provides max number of iterations
     // probably based on 
+
+
+    // ? outer iterations?
     for _ in 0..*context.maximum_amount_of_outer_iterations {
+        // gets correspondence points
         let correspondence_points = get_correspondence_points(get_field_mark_correspondence(
             measured_lines_in_field,
             correction,
@@ -787,25 +868,44 @@ fn get_fitted_field_mark_correspondence(
             *context.line_length_acceptance_factor,
         ));
 
+        // gets weight matrices from correspondence points
         let weight_matrices: Vec<_> = correspondence_points
             .iter()
+
+            // manipulate the correspondence points to a weight matrix
             .map(|correspondence_points| {
+
+                // first normalize by correcting the measured points by factor and minus reference
                 let normal =
                     (correction * correspondence_points.measured) - correspondence_points.reference;
+
+                // the measured point must be nonzero
                 if normal.norm() > 0.0 {
+                    // normalize the matrix
                     let normal_versor = normal.normalize();
+
+                    // ? return a symmetric matrix or something?
                     normal_versor * normal_versor.transpose()
                 } else {
+
                     Matrix2::zeros()
                 }
             })
             .collect();
-
+        
+        // store fit error for each gradient descent iteration
         let mut fit_errors_per_iteration = vec![];
+
+
+        // gradient descent iterations
         for _ in 0..*context.maximum_amount_of_gradient_descent_iterations {
+
+            // compute translation gradient
             let translation_gradient: Vector2<f32> = correspondence_points
                 .iter()
                 .zip(weight_matrices.iter())
+
+                // compute from correspondence points
                 .map(|(correspondence_points, weight_matrix)| {
                     2.0 * weight_matrix
                         * ((correction * correspondence_points.measured)
@@ -813,12 +913,20 @@ fn get_fitted_field_mark_correspondence(
                 })
                 .sum::<Vector2<f32>>()
                 / correspondence_points.len() as f32;
+
+            // compute rotation
             let rotation = correction.rotation.angle();
+
+            // compute rotation derivative
             let rotation_derivative =
                 matrix![-rotation.sin(), -rotation.cos(); rotation.cos(), -rotation.sin()];
+
+            // compute rotation gradient
             let rotation_gradient: f32 = correspondence_points
                 .iter()
                 .zip(weight_matrices.iter())
+
+                // compute from correspondence points
                 .map(|(correspondence_points, weight_matrix)| {
                     (2.0 * correspondence_points.measured.coords.transpose()
                         * rotation_derivative.transpose()
@@ -829,11 +937,15 @@ fn get_fitted_field_mark_correspondence(
                 })
                 .sum::<f32>()
                 / correspondence_points.len() as f32;
+
+            // compute a new correction matrix
             correction = Isometry2::new(
                 correction.translation.vector
                     - *context.gradient_descent_step_size * translation_gradient,
                 rotation - *context.gradient_descent_step_size * rotation_gradient,
             );
+
+            // for current GradDesc iteration compute and add the fit error
             if fit_errors_is_subscribed {
                 let error = get_fit_error(&correspondence_points, &weight_matrices, correction);
                 fit_errors_per_iteration.push(error);
@@ -848,6 +960,8 @@ fn get_fitted_field_mark_correspondence(
                 break;
             }
         }
+
+        // for current outer iteration add all GradDesc fit errors
         if fit_errors_is_subscribed {
             fit_errors.push(fit_errors_per_iteration);
         }
