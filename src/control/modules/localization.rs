@@ -317,13 +317,16 @@ impl Localization {
              */
             let mut fit_errors_per_measurement: Vec<Vec<Vec<Vec<f32>>>> = vec![];
 
-            // from the context get the measured lines
+            // from the CycleContext get the measured lines
             context
-                .measured_lines_in_field
+                .measured_lines_in_field // AdditionalOutput<Vec<Line<...>>>
                 .fill_on_subscription(Vec::new);
             context.correspondence_lines.fill_on_subscription(Vec::new);
+
+            // ?? dont even know what this means
+            // from CycleContext get the updates and fill them if they're subscribed
             context
-                .updates
+                .updates // AdditionalOutput<Vec<Vec<...>>>
                 .fill_on_subscription(|| vec![vec![]; self.hypotheses.len()]);
             
             
@@ -355,10 +358,33 @@ impl Localization {
                 // assert that top and bottom are synced -> otherwise panic 
                 assert_eq!(line_data_top_timestamp, line_data_bottom_timestamp);
 
+                /*
+                [src/control/modules/odometry.rs]
+                let current_odometry_to_last_odometry = Isometry2::from_parts(
+                    Translation2::from(offset_to_last_position),
+                    orientation_offset,
+                );
+
+                1. It uses offset_to_last_position which is calculated using:
+                fn calculate_offset_to_last_position()
+
+                
+
+                2. It uses orientation_offset which is calculated using 
+                last_rotation.rotation_to(&robot_orientation)\
+
+                3. Those 2 offsets (basically difference through translation and rotation)
+                are combined in a Isometry matrix
+                
+                */
+
                 // get odometry values from the specific timestamp (could be invalid)
-                // ? what are the odometry values actually?
                 let current_odometry_to_last_odometry = context
+
+                    // this looks like an array of odometry values through time
                     .current_odometry_to_last_odometry
+
+                    // getting the specific odometry value of a timestamp
                     .get(*line_data_top_timestamp);
                 
                 /*
@@ -422,8 +448,7 @@ impl Localization {
                     // ? to what
                     if *context.use_line_measurements {
 
-                        // get the rigid body transformation
-                        // ? to this position ???
+                        // get the rigid body transformation to field
                         let robot_to_field = scored_filter.pose_filter.isometry();
 
                         // get all measured lines in the field from top camera
@@ -502,8 +527,12 @@ impl Localization {
                                 }
                             },
                         );
+                        
 
-                        // ? what is is_subscribed?
+                        // look into:
+                        // [crates/framework/additional_output.rs]
+                        // checks if fit_error is subscribed
+                        // ? but where is this boolean changed?
                         if context.fit_errors.is_subscribed() {
                             fit_errors_per_hypothesis.push(fit_errors);
                         }
@@ -521,6 +550,13 @@ impl Localization {
                         the original value of fit_error. 
                         
                         Source: ChatGPT
+
+                        Used to compute uncertainty_weight:
+
+                        let uncertainty_weight = clamped_fit_error
+                                * number_of_measurements_weight
+                                * line_length_weight
+                                * line_distance_to_robot;
                         */
 
                         // get the max between fit error and minimum fit error
@@ -697,14 +733,14 @@ impl Localization {
                     scored_filter.score += *context.hypothesis_score_base_increase;
                 }
 
-                // end of for-loop-2
+                // NOTE: This is the end of the hypothesis forloop
 
                 if context.fit_errors.is_subscribed() {
                     fit_errors_per_measurement.push(fit_errors_per_hypothesis);
                 }
             }
 
-            // end of for-loop-1
+            // NOTE: This is the end of the LineData forloop
 
             // from all hypotheses we get the hypothesis with highest score
             // ! NOTE: score therefore seems to be related to the amount of matches with fieldmarks
