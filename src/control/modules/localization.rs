@@ -388,6 +388,8 @@ impl Localization {
 
                 BTW: This gets pushed into: fit_errors_per_measurement
                  */
+
+                // store all outer iteration info for each hypothesis
                 let mut fit_errors_per_hypothesis: Vec<Vec<Vec<f32>>> = vec![];
 
                 // for every hypothesis (=possible robot location)
@@ -506,11 +508,33 @@ impl Localization {
                             fit_errors_per_hypothesis.push(fit_errors);
                         }
 
+                        
+                        
+                        /*
+                        Extra information about the code below:
+
+                        clamping -> Dutch: geklemd
+
+                        The term "clamped" refers to the fact that the value of clamped_fit_error is limited or 
+                        "clamped" to be within a certain range, 
+                        specifically the range between *context.minimum_fit_error and 
+                        the original value of fit_error. 
+                        
+                        Source: ChatGPT
+                        */
+
                         // get the max between fit error and minimum fit error
-                        // ? what is clamped?
                         let clamped_fit_error = fit_error.max(*context.minimum_fit_error);
 
-                        // ? what is this used for
+
+                        /*
+                        used to compute uncertainty_weight:
+
+                        let uncertainty_weight = clamped_fit_error
+                                * number_of_measurements_weight
+                                * line_length_weight
+                                * line_distance_to_robot;
+                        */
                         let number_of_measurements_weight =
                             1.0 / field_mark_correspondences.len() as f32;
                         
@@ -540,8 +564,17 @@ impl Localization {
                             let line_length =
                                 field_mark_correspondence.measured_line_in_field.length();
                             
+                            
+                            /*
+                            used to compute uncertainty_weight:
+
+                            let uncertainty_weight = clamped_fit_error
+                                    * number_of_measurements_weight
+                                    * line_length_weight
+                                    * line_distance_to_robot;
+                            */
+
                             // when the length is 0, the weight is 1
-                            // ? what is this weight used for?
                             let line_length_weight = if line_length == 0.0 {
                                 1.0
                             } else {
@@ -553,6 +586,16 @@ impl Localization {
 
                             let line_center_point =
                                 field_mark_correspondence.measured_line_in_field.center();
+
+
+                            /*
+                            used to compute uncertainty_weight:
+
+                            let uncertainty_weight = clamped_fit_error
+                                    * number_of_measurements_weight
+                                    * line_length_weight
+                                    * line_distance_to_robot;
+                            */
                             let line_distance_to_robot = distance(
                                 &line_center_point,
                                 &Point2::from(robot_to_field.translation.vector),
