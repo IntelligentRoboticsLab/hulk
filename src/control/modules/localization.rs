@@ -138,7 +138,7 @@ impl Localization {
 
         // match last primary state, primary state and game phase
         match (self.last_primary_state, primary_state, game_phase) {
-            // if last primary is initial, primary is ready (looks like a staring case)
+            // if last primary is initial, primary is ready (looks like a starting case) create initial pose and hypotheses
             (PrimaryState::Initial, PrimaryState::Ready, _) => {
 
                 // ? what is an initial pose
@@ -149,6 +149,7 @@ impl Localization {
                     &context.initial_poses[*context.player_number],
                     context.field_dimensions,
                 );
+                // initialize initial hypotheses
                 self.hypotheses = vec![ScoredPoseFilter::from_isometry(
                     initial_pose,
                     *context.initial_hypothesis_covariance,
@@ -156,6 +157,8 @@ impl Localization {
                 )];
                 self.hypotheses_when_entered_playing = self.hypotheses.clone();
             }
+            // if last primary is set, primary is playing and game phase is penalty shoot whith Hulks kicking
+            // create hypotheses with striker pose
             (
                 PrimaryState::Set,
                 PrimaryState::Playing,
@@ -163,11 +166,14 @@ impl Localization {
                     kicking_team: Team::Hulks,
                 }),
             ) => {
+                // create striker pose
+                // ?? this looks like te location of the penalty taker 
                 let penalty_shoot_out_striker_pose = Isometry2::translation(
                     -context.field_dimensions.penalty_area_length
                         + (context.field_dimensions.length / 2.0),
                     0.0,
                 );
+                // create hypotheses with same (initial) values but different (striker) pose
                 self.hypotheses = vec![ScoredPoseFilter::from_isometry(
                     penalty_shoot_out_striker_pose,
                     *context.initial_hypothesis_covariance,
@@ -175,6 +181,8 @@ impl Localization {
                 )];
                 self.hypotheses_when_entered_playing = self.hypotheses.clone();
             }
+            // if last primary is set, primary is playing and game phase is penalty shoot out but for opponent
+            // create hypotheses with keeper pose
             (
                 PrimaryState::Set,
                 PrimaryState::Playing,
@@ -182,8 +190,11 @@ impl Localization {
                     kicking_team: Team::Opponent,
                 }),
             ) => {
+                // create pose of kepper
+                // ?? location
                 let penalty_shoot_out_keeper_pose =
                     Isometry2::translation(-context.field_dimensions.length / 2.0, 0.0);
+                // create hypotheses with same (initial) values but different (keeper) pose
                 self.hypotheses = vec![ScoredPoseFilter::from_isometry(
                     penalty_shoot_out_keeper_pose,
                     *context.initial_hypothesis_covariance,
@@ -191,6 +202,7 @@ impl Localization {
                 )];
                 self.hypotheses_when_entered_playing = self.hypotheses.clone();
             }
+            // if last primary is set and primary is playing, use current hypotheses and only clone it
             (PrimaryState::Set, PrimaryState::Playing, _) => {
                 self.hypotheses_when_entered_playing = self.hypotheses.clone();
             }
