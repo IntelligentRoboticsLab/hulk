@@ -128,13 +128,9 @@ impl Localization {
         let has_ground_contact = *require_some!(context.has_ground_contact);
         
 
-        // ? how does match work here
-        // ? what are different match cases - generally
-        // while answering this you can ask new question about specific matches
-        
-
-        // !! THIS LOOKS LIKE SOMETHING WITH FSM
-        // ? ? something like changing the current primary state
+        // the match function is used to create and set hypotheses, poses and booleans 
+        // according to the last primary state, the (current) primary state and the game phase
+        // it looks like something with an FSM
 
         // match last primary state, primary state and game phase
         match (self.last_primary_state, primary_state, game_phase) {
@@ -206,28 +202,38 @@ impl Localization {
             (PrimaryState::Set, PrimaryState::Playing, _) => {
                 self.hypotheses_when_entered_playing = self.hypotheses.clone();
             }
+            // if last primary is playing and primary is penalized, check if IllegalMotionInSet is present in penalty
             (PrimaryState::Playing, PrimaryState::Penalized, _) => {
                 match penalty {
+                    // if penalty contains IllegalMotionInSet, set corresponding bool flag to true
+                    // ?? what is this IllegalMotionInSet
                     Some(spl_network::Penalty::IllegalMotionInSet { remaining: _ }) => {
 
-
-                        //?? this is a boolean in the loc struct, why true?
                         self.is_penalized_with_motion_in_set = true;
                     }
+                    // otherwise do nothing
                     Some(_) => {}
                     None => {}
                 };
             }
+            // if last primary is penalized and primary is not penalized: 
             (PrimaryState::Penalized, _, _) if primary_state != PrimaryState::Penalized => {
 
-                // ?? why does this boolean matter here and what does it do
+                // continue on previous match case: if penalty contains illegal motion in set:
+                // hypotheses gets old value of hypotheses when entered playing
+                // otherwhise hypothese gets new value of hypotheses when entered playing
+                // ?? why is this
                 if self.is_penalized_with_motion_in_set {
 
-                    // ?? why does this other boolean matter here and what does it do?
+                    // ?? where does this bool come from and when is it set
                     if self.was_picked_up_while_penalized_with_motion_in_set {
+                        // assign hypotheses the old value of hypotheses when entered playing
                         self.hypotheses = take(&mut self.hypotheses_when_entered_playing);
 
+                        // generate new set of penalized poses
                         let penalized_poses = generate_penalized_poses(context.field_dimensions);
+                        // create new set of hypotheses based on the poses
+                        // ?? what values do they get, where do they come from, where are they used
                         self.hypotheses_when_entered_playing = penalized_poses
                             .into_iter()
                             .map(|pose| {
@@ -240,11 +246,14 @@ impl Localization {
                             .collect();
                     }
 
-                    // ! there are those booleans again, back to default false
+                    // actions to perform are performed so values back to false
                     self.is_penalized_with_motion_in_set = false;
                     self.was_picked_up_while_penalized_with_motion_in_set = false;
                 } else {
+                    // generate new set of penalized poses
                     let penalized_poses = generate_penalized_poses(context.field_dimensions);
+                    // create new set of hypotheses based on the poses
+                    // ?? what values do they get, where do they come from, where are they used
                     self.hypotheses = penalized_poses
                         .into_iter()
                         .map(|pose| {
@@ -255,11 +264,19 @@ impl Localization {
                             )
                         })
                         .collect();
+                    // hypotheses gets new value of hypotheses when entered playing
                     self.hypotheses_when_entered_playing = self.hypotheses.clone();
                 }
             }
+            // if last primary is unstiff
+            // ?? what is unstiff
             (PrimaryState::Unstiff, _, _) => {
+                // same as else statement above: hypotheses gets new value of hypotheses when entered playing
+
+                // generate new set of penalized poses
                 let penalized_poses = generate_penalized_poses(context.field_dimensions);
+                // create new set of hypotheses based on the poses
+                // ?? what values do they get, where do they come from, where are they used
                 self.hypotheses = penalized_poses
                     .into_iter()
                     .map(|pose| {
@@ -270,8 +287,10 @@ impl Localization {
                         )
                     })
                     .collect();
+                // hypotheses gets new value of hypotheses when entered playing
                 self.hypotheses_when_entered_playing = self.hypotheses.clone();
             }
+            // if none of the above matches is the case, do nothing
             _ => {}
         }
 
