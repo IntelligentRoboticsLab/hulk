@@ -1078,7 +1078,7 @@ fn get_fitted_field_mark_correspondence(
             fit_errors.push(fit_errors_per_iteration);
         }
     }
-
+    // get field mark correspondences using updated correction matrix
     let field_mark_correspondences = get_field_mark_correspondence(
         measured_lines_in_field,
         correction,
@@ -1086,7 +1086,9 @@ fn get_fitted_field_mark_correspondence(
         *context.line_length_acceptance_factor,
     );
 
+    // get updated correspondence points after fitting
     let correspondence_points = get_correspondence_points(field_mark_correspondences.clone());
+    // for all correspondence points, normalize their vectors using the updated correction matrix
     let weight_matrices: Vec<_> = correspondence_points
         .iter()
         .map(|correspondence_points| {
@@ -1121,7 +1123,7 @@ fn get_fit_error(
                 .transpose()
                 * weight_matrix
                 * (correction * correspondence_points.measured - correspondence_points.reference))
-                .x
+                .x // why only x?
         })
         .sum::<f32>()
         / correspondence_points.len() as f32
@@ -1140,11 +1142,14 @@ fn get_field_mark_correspondence(
                 .iter()
                 .filter_map(|field_mark| {
                     let transformed_line = correction * measured_line_in_field;
+                    // use match to let variable either the length of the line or the circle radius
                     let field_mark_length = match field_mark {
                         FieldMark::Line { line, direction: _ } => line.length(),
                         FieldMark::Circle { center: _, radius } => *radius, // approximation
                     };
                     let measured_line_length = transformed_line.length();
+
+                    // return field mark 
                     if measured_line_length <= field_mark_length * line_length_acceptance_factor {
                         let correspondences = field_mark.to_correspondence_points(transformed_line);
                         assert_relative_eq!(
