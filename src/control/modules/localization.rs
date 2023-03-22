@@ -1234,8 +1234,10 @@ fn get_translation_and_rotation_measurement(
     robot_to_field: Isometry2<f32>,
     field_mark_correspondence: FieldMarkCorrespondence,
 ) -> Vector2<f32> {
+    // Extract line and direction from FieldMark::Line and assign to field_mark_line and field_mark_line_direction
     let (field_mark_line, field_mark_line_direction) = match field_mark_correspondence.field_mark {
-        FieldMark::Line { line, direction } => (line, direction),
+        FieldMark::Line { line, direction } => (line, direction), 
+        // Panic if FieldMark is not FieldMark::Line
         _ => panic!("Expected line mark"),
     };
     let measured_line_in_field = match field_mark_line_direction {
