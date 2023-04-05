@@ -59,6 +59,7 @@ i2cdev = "0.5.1"
 image = "0.24.4"
 ipnetwork = "0.19.0"
 itertools = "0.10.5"
+kira = { version = "0.7.1", default-features = false, features = ["cpal", "ogg", "wav"] }
 libc = "0.2.133"
 log = "0.4.17"
 mlua = { version = "0.8.3", features = ["luajit", "serialize"] }
@@ -104,7 +105,6 @@ uvcvideo = { path = "crates/uvcvideo" }
 v4l = { version = "0.12.1", git = "https://github.com/HULKs/libv4l-rs", branch = "hulksChanges" }
 walkdir = "2.3.2"
 webots = { version = "0.5.0" }
-rodio = "0.16.0"
 
 [dependencies]
 alsa = { workspace = true, optional = true }
@@ -120,6 +120,7 @@ futures-util = { workspace = true }
 i2cdev = { workspace = true }
 image = { workspace = true }
 itertools = { workspace = true }
+kira = { workspace = true }
 log = { workspace = true }
 mlua = { workspace = true, optional = true }
 module_derive = { workspace = true }
@@ -143,7 +144,6 @@ types = { workspace = true }
 uvcvideo = { workspace = true, optional = true }
 v4l = { workspace = true, optional = true }
 webots = { workspace = true, optional = true }
-rodio = { workspace = true }
 
 [build-dependencies]
 module_attributes = { path = "crates/module_attributes" }
