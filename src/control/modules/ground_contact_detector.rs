@@ -72,9 +72,9 @@ impl GroundContactDetector {
             let sound_data = StaticSoundData::from_file("etc/sounds/weeeee.wav", StaticSoundSettings::new()).unwrap();
             let mut sound =  manager.play(sound_data).unwrap();
             sound.set_volume(
-                0.5,
+                0.1,
                 Tween {
-                    duration: Duration::from_secs(2),
+                    duration: Duration::from_secs(0),
                     ..Default::default()
                 },
             ).unwrap();
